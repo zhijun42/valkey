@@ -1090,6 +1090,7 @@ clusterNode *getNodeByQuery(client *c, int *error_code) {
     if (c->slot == -1) return myself;
 
     n = getNodeBySlot(c->slot);
+    serverLog(LL_WARNING, "~~ at first n is %.40s (%s)", n->name, n->human_nodename);
 
     /* If a slot is not served, we are in "cluster down" state.
      * This check is done early to preserve historical behavior. */
@@ -1311,6 +1312,7 @@ after_checking_each_key:
  * node we want to mention in the redirection. Moreover hashslot should
  * be set to the hash slot that caused the redirection. */
 void clusterRedirectClient(client *c, clusterNode *n, int hashslot, int error_code) {
+    serverLog(LL_NOTICE, "~~Redirecting slot %d to node %.40s (%s)", hashslot, n->name, n->human_nodename);
     if (error_code == CLUSTER_REDIR_CROSS_SLOT) {
         addReplyError(c, "-CROSSSLOT Keys in request don't hash to the same slot");
     } else if (error_code == CLUSTER_REDIR_UNSTABLE) {
@@ -1385,6 +1387,7 @@ int clusterRedirectBlockedClientIfNeeded(client *c) {
              * 1) The slot is unassigned, emitting a cluster down error.
              * 2) The slot is neither handled by this node, nor being imported. */
             if (node != myself && getImportingSlotSource(slot) == NULL) {
+                serverLog(LL_WARNING, "~~in redirect~~");
                 if (node == NULL) {
                     clusterRedirectClient(c, NULL, 0, CLUSTER_REDIR_DOWN_UNBOUND);
                 } else {

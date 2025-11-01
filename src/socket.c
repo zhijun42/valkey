@@ -80,7 +80,8 @@ static connection *connCreateSocket(void) {
     conn->type = &CT_Socket;
     conn->fd = -1;
     conn->iovcnt = IOV_MAX;
-
+    conn->client_ip[0] = '\0';
+    conn->client_port = 0;
     return conn;
 }
 
@@ -99,6 +100,8 @@ static connection *connCreateAcceptedSocket(int fd, void *priv) {
     connection *conn = connCreateSocket();
     conn->fd = fd;
     conn->state = CONN_STATE_ACCEPTING;
+    conn->client_ip[0] = '\0';
+    conn->client_port = 0;
     return conn;
 }
 
@@ -327,10 +330,14 @@ static void connSocketAcceptHandler(aeEventLoop *el, int fd, void *privdata, int
             if (errno != EWOULDBLOCK) serverLog(LL_WARNING, "Accepting client connection: %s", server.neterr);
             return;
         }
-        serverLog(LL_VERBOSE, "Accepted %s:%d", cip, cport);
+        serverLog(LL_VERBOSE, "Accepted client connection %s:%d", cip, cport);
 
         if (server.tcpkeepalive) anetKeepAlive(NULL, cfd, server.tcpkeepalive);
-        acceptCommonHandler(connCreateAcceptedSocket(cfd, NULL), flags, cip);
+        connection *conn = connCreateAcceptedSocket(cfd, NULL);
+        strncpy(conn->client_ip, cip, NET_IP_STR_LEN);
+        conn->client_ip[NET_IP_STR_LEN - 1] = '\0';
+        conn->client_port = cport;
+        acceptCommonHandler(conn, flags, cip);
     }
 }
 

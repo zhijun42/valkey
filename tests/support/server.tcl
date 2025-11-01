@@ -545,6 +545,7 @@ proc start_server {options {code undefined}} {
         dict set config "tls-ca-cert-file" [format "%s/tests/tls/ca.crt" [pwd]]
         dict set config "loglevel" "debug"
     }
+    dict set config "loglevel" "debug"
 
     if {$::io_threads} {
         dict set config "io-threads" 2

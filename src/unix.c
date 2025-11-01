@@ -86,7 +86,8 @@ static connection *connCreateUnix(void) {
     conn->type = &CT_Unix;
     conn->fd = -1;
     conn->iovcnt = IOV_MAX;
-
+    conn->client_ip[0] = '\0';
+    conn->client_port = 0;
     return conn;
 }
 
@@ -95,6 +96,8 @@ static connection *connCreateAcceptedUnix(int fd, void *priv) {
     connection *conn = connCreateUnix();
     conn->fd = fd;
     conn->state = CONN_STATE_ACCEPTING;
+    conn->client_ip[0] = '\0';
+    conn->client_port = 0;
     return conn;
 }
 

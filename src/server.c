@@ -4302,6 +4302,7 @@ int processCommand(client *c) {
             } else {
                 flagTransaction(c);
             }
+            serverLog(LL_WARNING, "~~In process command");
             clusterRedirectClient(c, n, c->slot, error_code);
             c->duration = 0;
             c->cmd->rejected_calls++;
