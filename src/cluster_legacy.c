@@ -54,6 +54,7 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <sys/file.h>
+#include <sys/time.h>
 
 /* A global reference to myself is handy to make code more clear.
  * Myself always points to server.cluster->myself, that is, the clusterNode
@@ -3833,8 +3834,9 @@ int clusterProcessPacket(clusterLink *link) {
 
     /* PING, PONG, MEET: process config information. */
     if (type == CLUSTERMSG_TYPE_PING || type == CLUSTERMSG_TYPE_PONG || type == CLUSTERMSG_TYPE_MEET) {
-        serverLog(LL_DEBUG, "%s packet received: %.40s", clusterGetMessageTypeString(type),
-                  link->node ? link->node->name : "NULL");
+        serverLog(LL_DEBUG, "%s packet received: %.40s at time %s", clusterGetMessageTypeString(type),
+                  link->node ? link->node->name : "NULL",
+                  hdr->sent_time);
 
         if (sender && nodeInMeetState(sender)) {
             /* Once we get a response for MEET from the sender, we can stop sending more MEET. */
@@ -4536,6 +4538,8 @@ static void clusterBuildMessageHdrLight(clusterMsgLight *hdr, int type, size_t m
     hdr->totlen = htonl(msglen);
 }
 
+void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst);
+
 /* Build the message header. hdr must point to a buffer at least
  * sizeof(clusterMsg) in bytes. */
 static void clusterBuildMessageHdr(clusterMsg *hdr, int type, size_t msglen) {
@@ -4547,6 +4551,16 @@ static void clusterBuildMessageHdr(clusterMsg *hdr, int type, size_t msglen) {
      * node is flagged as replica so the receiver knows that it is NOT really
      * in charge for this slots. */
     primary = (nodeIsReplica(myself) && myself->replicaof) ? myself->replicaof : myself;
+
+    char buf[64];
+    struct tm tm;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int daylight_active = atomic_load_explicit(&server.daylight_active, memory_order_relaxed);
+    nolocks_localtime(&tm, tv.tv_sec, server.timezone, daylight_active);
+    int off = strftime(buf, sizeof(buf), "%d %b %Y %H:%M:%S.", &tm);
+    snprintf(buf + off, sizeof(buf) - off, "%03d", (int)tv.tv_usec / 1000);
+    memcpy(hdr->sent_time, buf, sizeof(buf));
 
     hdr->ver = htons(CLUSTER_PROTO_VER);
     hdr->sig[0] = 'R';

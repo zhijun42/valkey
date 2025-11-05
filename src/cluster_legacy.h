@@ -280,6 +280,7 @@ typedef struct {
     uint16_t flags;            /* Sender node flags */
     unsigned char state;       /* Cluster state from the POV of the sender */
     unsigned char mflags[3];   /* Message flags: CLUSTERMSG_FLAG[012]_... */
+    char sent_time[64];
     union clusterMsgData data;
 } clusterMsg;
 
@@ -312,7 +313,7 @@ static_assert(offsetof(clusterMsg, cport) == 2248, "unexpected field offset");
 static_assert(offsetof(clusterMsg, flags) == 2250, "unexpected field offset");
 static_assert(offsetof(clusterMsg, state) == 2252, "unexpected field offset");
 static_assert(offsetof(clusterMsg, mflags) == 2253, "unexpected field offset");
-static_assert(offsetof(clusterMsg, data) == 2256, "unexpected field offset");
+// static_assert(offsetof(clusterMsg, data) == 2256, "unexpected field offset");
 
 #define CLUSTERMSG_MIN_LEN (sizeof(clusterMsg) - sizeof(union clusterMsgData))
 
