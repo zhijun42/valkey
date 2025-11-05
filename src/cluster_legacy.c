@@ -2903,7 +2903,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
     clusterNode *migration_source_node = NULL;
 
     for (j = 0; j < CLUSTER_SLOTS; j++) {
-        clusterNode* slot_owner = server.cluster->slots[j];
+        clusterNode *slot_owner = server.cluster->slots[j];
         if (bitmapTestBit(slots, j)) {
             sender_slots++;
 
