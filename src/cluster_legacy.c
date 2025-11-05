@@ -4138,8 +4138,7 @@ int clusterProcessPacket(clusterLink *link) {
             nodeFailed(clusterNodeGetPrimary(myself)) &&
             areInSameShard(sender, myself) &&
             nodeIsReplica(myself) &&
-            sender != clusterNodeGetPrimary(myself)
-            ) {
+            sender != clusterNodeGetPrimary(myself)) {
             serverLog(LL_NOTICE, "Sender %.40s (%s) and I are in the same shard and I should follow it",
                       sender->name, sender->human_nodename);
             clusterSetPrimary(sender, 1, 1);
