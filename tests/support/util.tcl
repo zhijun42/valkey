@@ -22,6 +22,16 @@ proc randstring {min max {type binary}} {
     return $output
 }
 
+# Shows the timestamp to millisecond precision. This is helpful
+# for cross-examining the Valkey server logs and TCL command logs.
+proc get_current_ts {} {
+    set now_ms [clock milliseconds]
+    set now_s  [expr {$now_ms / 1000}]
+    set ms_part [format "%03d" [expr {$now_ms % 1000}]]
+    set ts [clock format [clock seconds] -format %H:%M:%S]
+    return "$ts.$ms_part"
+}
+
 # Useful for some test
 proc zlistAlikeSort {a b} {
     if {[lindex $a 0] > [lindex $b 0]} {return 1}

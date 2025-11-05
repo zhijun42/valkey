@@ -3896,13 +3896,13 @@ void syncWithPrimaryHandleError(connection **conn) {
  * * Motivation *
  *  - Reduce primary memory load. We do that by moving the COB tracking to the replica side. This also decrease
  *    the chance for COB overruns. Note that primary's input buffer limits at the replica side are less restricted
- *    then primary's COB as the replica plays less critical part in the replication group. While increasing the
+ *    than primary's COB as the replica plays less critical part in the replication group. While increasing the
  *    primary's COB may end up with primary reaching swap and clients suffering, at replica side we're more at
  *    ease with it. Larger COB means better chance to sync successfully.
  *  - Reduce primary main process CPU load. By opening a new, dedicated channel for the RDB transfer, child
  *    processes can have direct access to the new channel. Due to TLS connection restrictions, this was not
  *    possible using one main channel. We eliminate the need for the child process to use the primary's
- *    child-proc -> main-proc pipeline, thus freeing up the main process to process clients queries.
+ *    child-proc -> main-proc pipeline, thus freeing up the main process to handle clients queries.
  *
  * * High level interface design *
  *  - Dual channel sync begins when the replica sends a REPLCONF capa dual-channel to the primary during initial
@@ -4083,7 +4083,7 @@ void syncWithPrimary(connection *conn) {
         if (server.repl_state != REPL_STATE_RECEIVE_PSYNC_REPLY) {
             serverLog(LL_WARNING,
                       "syncWithPrimary(): state machine error, "
-                      "state should be RECEIVE_PSYNC but is %d",
+                      "state should be RECEIVE_PSYNC_REPLY but is %d",
                       server.repl_state);
             syncWithPrimaryHandleError(&conn);
             return;
