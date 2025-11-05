@@ -371,7 +371,7 @@ proc test_blocked_replica_stale_state_race {type} {
         puts "$ts wait for sub-replica"
         set matched_result [wait_for_log_messages -7 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10]
         set line_number [lindex $matched_result 1]
-        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] $line_number 1000 10
+        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] 0 1000 10
 
         # Later replica 7 will start following primary 4 again.
         wait_for_log_messages -7 [list "*Sender $R4_id* and I are in the same shard and I should follow it"] $line_number 1000 10
