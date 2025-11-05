@@ -4132,7 +4132,7 @@ int clusterProcessPacket(clusterLink *link) {
         /* In some corner case our primary might be failed, and it used to
          * have a replica, which has become the new primary. We should start
          * following this new primary, otherwise we would start failover and
-         * eventually become an emtpy primary.
+         * eventually become an empty primary.
          */
         if (sender && sender_claims_to_be_primary &&
             nodeFailed(clusterNodeGetPrimary(myself)) &&
