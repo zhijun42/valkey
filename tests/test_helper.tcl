@@ -332,6 +332,7 @@ proc run_solo {name code} {
 proc cleanup {} {
     if {!$::quiet} {puts -nonewline "Cleanup: may take some time... "}
     flush stdout
+    return
     catch {exec rm -rf {*}[glob tests/tmp/valkey.conf.*]}
     catch {exec rm -rf {*}[glob tests/tmp/nodes.conf.*]}
     catch {exec rm -rf {*}[glob tests/tmp/server*.*]}

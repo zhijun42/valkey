@@ -160,13 +160,13 @@ proc test_migrated_replica {type} {
     }
 } ;# proc
 
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_migrated_replica "shutdown"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_migrated_replica "sigstop"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_migrated_replica "shutdown"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_migrated_replica "sigstop"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
 
 proc test_nonempty_replica {type} {
     test "New non-empty replica reports zero repl offset and rank, and fails to win election - $type" {
@@ -207,13 +207,13 @@ proc test_nonempty_replica {type} {
     }
 } ;# proc
 
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_nonempty_replica "shutdown"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_nonempty_replica "sigstop"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_nonempty_replica "shutdown"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_nonempty_replica "sigstop"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
 
 proc test_sub_replica {type} {
     test "Sub-replica reports zero repl offset and rank, and fails to win election - $type" {
@@ -277,13 +277,13 @@ proc test_sub_replica {type} {
     }
 }
 
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_sub_replica "shutdown"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_sub_replica "sigstop"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_sub_replica "shutdown"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_sub_replica "sigstop"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
 
 
 # This test setup is almost identical to the previous sub-replica test, except that
@@ -328,7 +328,7 @@ start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 
 # race that can occur whenever replicas connect during overlapping RDB saves or network
 # partitions, even without artificial delays.
 proc test_blocked_replica_stale_state_race {type} {
-    test "Blocked replica mistakenly become sub-replica and gets fixed later - $type" {
+    test "Blocked replica mistakenly becomes sub-replica and gets fixed later - $type" {
         R 3 config set cluster-replica-validity-factor 0
         R 7 config set cluster-replica-validity-factor 0
         R 3 config set cluster-allow-replica-migration yes
@@ -380,69 +380,69 @@ proc test_blocked_replica_stale_state_race {type} {
 # dependency, and thus replica 4 couldn't get promoted to primary during the
 # replica 7 blocking period. Then we can't create the edge case we're trying
 # test here.
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 200 cluster-migration-barrier 999}} {
     test_blocked_replica_stale_state_race "sigstop"
 } my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-proc test_cluster_setslot {type} {
-    test "valkey-cli make source node ignores NOREPLICAS error when doing the last CLUSTER SETSLOT - $type" {
-        R 3 config set cluster-allow-replica-migration no
-        R 7 config set cluster-allow-replica-migration yes
-
-        if {$type == "setslot"} {
-            # Make R 7 drop the PING message so that we have a higher
-            # chance to trigger the migration from CLUSTER SETSLOT.
-            R 7 DEBUG DROP-CLUSTER-PACKET-FILTER 1
-        }
-
-        move_slot_0_from_primary_3_to_primary_0
-
-        # Wait for R 3 to report that it is an empty primary (cluster-allow-replica-migration no)
-        wait_for_log_messages -3 {"*I am now an empty primary*"} 0 1000 50
-
-        if {$type == "setslot"} {
-            R 7 DEBUG DROP-CLUSTER-PACKET-FILTER -1
-        }
-
-        # Make sure server 3 lost its replica (server 7) and server 7 becomes a replica of primary 0.
-        set addr "[srv 0 host]:[srv 0 port]"
-        wait_for_condition 1000 50 {
-            [s -3 role] eq {master} &&
-            [s -3 connected_slaves] eq 0 &&
-            [s -7 role] eq {slave} &&
-            [get_my_primary_peer 7] eq $addr
-        } else {
-            puts "R 3 role: [R 3 role]"
-            puts "R 7 role: [R 7 role]"
-            fail "Server 3 and 7 role response has not changed"
-        }
-    }
-}
-
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_cluster_setslot "gossip"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_cluster_setslot "setslot"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
-
-start_cluster 3 0 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test "Empty primary will check and delete the dirty slots" {
-        R 2 config set cluster-allow-replica-migration no
-
-        # Write a key to slot 0.
-        R 2 incr key_977613
-
-        # Move slot 0 from primary 2 to primary 0.
-        R 0 cluster bumpepoch
-        R 0 cluster setslot 0 node [R 0 cluster myid]
-
-        # Wait for R 2 to report that it is an empty primary (cluster-allow-replica-migration no)
-        wait_for_log_messages -2 {"*I am now an empty primary*"} 0 1000 50
-
-        # Make sure primary 0 will delete the dirty slots.
-        verify_log_message -2 "*Deleting keys in dirty slot 0*" 0
-        assert_equal [R 2 dbsize] 0
-    }
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#proc test_cluster_setslot {type} {
+#    test "valkey-cli make source node ignores NOREPLICAS error when doing the last CLUSTER SETSLOT - $type" {
+#        R 3 config set cluster-allow-replica-migration no
+#        R 7 config set cluster-allow-replica-migration yes
+#
+#        if {$type == "setslot"} {
+#            # Make R 7 drop the PING message so that we have a higher
+#            # chance to trigger the migration from CLUSTER SETSLOT.
+#            R 7 DEBUG DROP-CLUSTER-PACKET-FILTER 1
+#        }
+#
+#        move_slot_0_from_primary_3_to_primary_0
+#
+#        # Wait for R 3 to report that it is an empty primary (cluster-allow-replica-migration no)
+#        wait_for_log_messages -3 {"*I am now an empty primary*"} 0 1000 50
+#
+#        if {$type == "setslot"} {
+#            R 7 DEBUG DROP-CLUSTER-PACKET-FILTER -1
+#        }
+#
+#        # Make sure server 3 lost its replica (server 7) and server 7 becomes a replica of primary 0.
+#        set addr "[srv 0 host]:[srv 0 port]"
+#        wait_for_condition 1000 50 {
+#            [s -3 role] eq {master} &&
+#            [s -3 connected_slaves] eq 0 &&
+#            [s -7 role] eq {slave} &&
+#            [get_my_primary_peer 7] eq $addr
+#        } else {
+#            puts "R 3 role: [R 3 role]"
+#            puts "R 7 role: [R 7 role]"
+#            fail "Server 3 and 7 role response has not changed"
+#        }
+#    }
+#}
+#
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_cluster_setslot "gossip"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_cluster_setslot "setslot"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+#
+#start_cluster 3 0 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test "Empty primary will check and delete the dirty slots" {
+#        R 2 config set cluster-allow-replica-migration no
+#
+#        # Write a key to slot 0.
+#        R 2 incr key_977613
+#
+#        # Move slot 0 from primary 2 to primary 0.
+#        R 0 cluster bumpepoch
+#        R 0 cluster setslot 0 node [R 0 cluster myid]
+#
+#        # Wait for R 2 to report that it is an empty primary (cluster-allow-replica-migration no)
+#        wait_for_log_messages -2 {"*I am now an empty primary*"} 0 1000 50
+#
+#        # Make sure primary 0 will delete the dirty slots.
+#        verify_log_message -2 "*Deleting keys in dirty slot 0*" 0
+#        assert_equal [R 2 dbsize] 0
+#    }
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster

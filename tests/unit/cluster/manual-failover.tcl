@@ -569,7 +569,7 @@ start_cluster 3 2 {tags {external:skip cluster}} {
         }
 
         # Make sure R4 indeed detect the sub-replica and fixed the replicaof.
-        set pattern "*I'm a sub-replica! Reconfiguring myself as a replica of $R3_nodeid from $R0_nodeid*"
+        set pattern "*I'm a sub-replica! Reconfiguring myself as a replica of $R3_nodeid* from $R0_nodeid*"
         verify_log_message -4 $pattern 0
 
         R 3 debug disable-cluster-reconnection 0

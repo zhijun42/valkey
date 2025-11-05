@@ -31,6 +31,7 @@ jobs:
       - name: test
         run: |
           sudo apt-get install tcl8.6 tclx
+          ./runtest --verbose --single tests/unit/cluster/replica-migration.tcl
           ./runtest --verbose --tags -slow --dump-logs
       - name: module api test
         run: CFLAGS='-Werror' ./runtest-moduleapi --verbose --dump-logs

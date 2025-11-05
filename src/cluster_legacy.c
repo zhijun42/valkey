@@ -1313,6 +1313,13 @@ void clusterUpdateMyselfClientIpV6(void) {
     updateAnnouncedClientIpV6(myself, server.cluster_announce_client_ipv6);
 }
 
+static void updateHumanNodenameToAddress(clusterNode *node) {
+    const int port = server.tls_cluster ? node->tls_port : node->tcp_port;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s:%d", node->ip, port);
+    updateAnnouncedHumanNodename(node, buf);
+}
+
 void clusterInit(void) {
     int saveconf = 0;
 
@@ -1408,7 +1415,8 @@ void clusterInit(void) {
     clusterUpdateMyselfClientIpV4();
     clusterUpdateMyselfClientIpV6();
     clusterUpdateMyselfHostname();
-    clusterUpdateMyselfHumanNodename();
+    // clusterUpdateMyselfHumanNodename();
+    updateHumanNodenameToAddress(myself);
     resetClusterStats();
 }
 
