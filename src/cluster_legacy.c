@@ -136,6 +136,7 @@ sds clusterEncodeOpenSlotsAuxField(int rdbflags);
 int clusterDecodeOpenSlotsAuxField(int rdbflags, sds s);
 static int nodeExceedsHandshakeTimeout(clusterNode *node, mstime_t now);
 void clusterCommandFlushslot(client *c);
+static long long clusterWriteReschedule(aeEventLoop *el, long long id, void *data);
 
 /* Only primaries that own slots have voting rights.
  * Returns 1 if the node has voting rights, otherwise returns 0. */
@@ -1652,6 +1653,7 @@ clusterLink *createClusterLink(clusterNode *node) {
         node->link = link;
     }
     link->flags = 0;
+    link->send_next_msg_at = 0;
     return link;
 }
 
@@ -4258,6 +4260,22 @@ void clusterWriteHandler(connection *conn) {
     clusterLink *link = connGetPrivateData(conn);
     ssize_t nwritten;
     size_t totwritten = 0;
+    clusterNode *node = link->node;
+
+    /* If delay is turned on, check if we're allowed to send packets now. */
+    if (server.debug_cluster_send_packet_delay > 0 && link->send_next_msg_at > 0) {
+        long long now = ustime();
+        serverLog(LL_NOTICE, "now is %llu , link->send_next_msg_at is %llu", now, link->send_next_msg_at);
+        if (now < link->send_next_msg_at) {
+            long long delay_ms = (link->send_next_msg_at - now) / 1000;
+            serverLog(LL_NOTICE, "Can't send message ,delaying %llu ms", delay_ms);
+            aeCreateTimeEvent(server.el, delay_ms, clusterWriteReschedule, link, NULL);
+            connSetWriteHandler(link->conn, NULL);
+            return;
+        }
+        serverLog(LL_NOTICE, "Reset send_next_msg_at to 0");
+        link->send_next_msg_at = 0;
+    }
 
     while (totwritten < NET_MAX_WRITES_PER_EVENT && listLength(link->send_msg_queue) > 0) {
         listNode *head = listFirst(link->send_msg_queue);
@@ -4289,9 +4307,30 @@ void clusterWriteHandler(connection *conn) {
         link->send_msg_queue_mem -= sizeof(listNode) + blocklen;
 
         totwritten += nwritten;
+        /* If delay is enabled, skip the next packet and exit now. */
+        if (server.debug_cluster_send_packet_delay > 0) {
+            link->send_next_msg_at = ustime() + server.debug_cluster_send_packet_delay * 1000;
+            long long delay_ms = server.debug_cluster_send_packet_delay;
+            serverLog(LL_NOTICE, "Can't send next msg to node %.40s (%s). delaying %llu ms",
+                node->name, node->human_nodename, delay_ms);
+            aeCreateTimeEvent(server.el, delay_ms, clusterWriteReschedule, link, NULL);
+            /* Send exactly one full message per event */
+            connSetWriteHandler(link->conn, NULL);
+            return;
+        }
     }
 
     if (listLength(link->send_msg_queue) == 0) connSetWriteHandler(link->conn, NULL);
+}
+
+/* In debug mode we might want to temporarily pause a connection to hold
+ * off sending more data, and re-enable it after a delay. */
+static long long clusterWriteReschedule(aeEventLoop *el, long long id, void *data) {
+    const clusterLink *link = data;
+    /* Re-attach the writer if there’s still data to send */
+    if (listLength(link->send_msg_queue) > 0 && link->conn)
+        connSetWriteHandlerWithBarrier(link->conn, clusterWriteHandler, 1);
+    return AE_NOMORE;
 }
 
 /* A connect handler that gets called when a connection to another node

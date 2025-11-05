@@ -41,6 +41,7 @@ typedef struct clusterLink {
     clusterNode *node;                     /* Node related to this link. Initialized to NULL when unknown */
     int inbound;                           /* 1 if this link is an inbound link accepted from the related node */
     int flags;                             /* CLUSTER_LINK_... */
+    long long send_next_msg_at;            /* Simulate network slowness. If not 0, do not send packets before then */
 } clusterLink;
 
 /* Cluster link flags and macros. */

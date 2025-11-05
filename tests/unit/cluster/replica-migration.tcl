@@ -226,8 +226,6 @@ proc test_sub_replica {type} {
         move_slot_0_from_primary_3_to_primary_0
 
         # Make sure server 3 and server 7 become a replica of primary 0.
-        set ts [get_current_ts]
-        puts "$ts wait for follow R0"
         set addr "[srv 0 host]:[srv 0 port]"
         wait_for_condition 1000 50 {
             [get_my_primary_peer 3] eq $addr &&
@@ -329,24 +327,38 @@ proc test_sub_replica {type} {
 # partitions, even without artificial delays.
 proc test_blocked_replica_stale_state_race {type} {
     test "Blocked replica mistakenly becomes sub-replica and gets fixed later - $type" {
+        set ts [get_current_ts]
+        puts "$ts wait R 3 config"
         R 3 config set cluster-replica-validity-factor 0
         R 7 config set cluster-replica-validity-factor 0
         R 3 config set cluster-allow-replica-migration yes
         R 7 config set cluster-allow-replica-migration yes
+        #
+        set ts [get_current_ts]
+        puts "$ts wait R 4 debug"
+        R 4 debug cluster-packet-delay 10
 
+        set ts [get_current_ts]
+        puts "$ts wait for move slot"
         populate_data
         move_slot_0_from_primary_3_to_primary_0
 
         # Make sure server 3 and server 7 become a replica of primary 0.
+        set ts [get_current_ts]
+        puts "$ts wait for 3 and 7 to follow 0"
         set R0_id [R 0 CLUSTER MYID]
         wait_for_log_messages -3 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R0_id*"] 0 1000 10
         wait_for_log_messages -7 [list "*Lost my last slot during slot migration. Reconfiguring myself as a replica of $R0_id*"] 0 1000 10
 
         # Stop primary 0 to start a failover.
+        set ts [get_current_ts]
+        puts "$ts wait for shut down 0"
         set primary0_pid [stop_primary_0 $type]
 
         # Wait for the replica to become a primary, and make sure
         # the other primary become a replica.
+        set ts [get_current_ts]
+        puts "$ts wait for r4 won"
         set R4_id [R 4 CLUSTER MYID]
         wait_for_log_messages -4 {"*Failover election won: I'm the new primary*"} 0 1000 10
         wait_for_log_messages -3 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10
@@ -355,9 +367,11 @@ proc test_blocked_replica_stale_state_race {type} {
         # the replica 7 becomes a sub-replica first and then reconfigures to follow primary 4.
         # But here replica 7 reconfigures to follow primary 4 first and then mistakenly finds
         # out it's a sub-replica.
+        set ts [get_current_ts]
+        puts "$ts wait for sub-replica"
         set matched_result [wait_for_log_messages -7 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10]
         set line_number [lindex $matched_result 1]
-        wait_for_log_messages -7 [list "* nonono I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] 0 1000 10
+        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] $line_number 1000 10
 
         # Later replica 7 will start following primary 4 again.
         wait_for_log_messages -7 [list "*Sender $R4_id* and I are in the same shard and I should follow it"] $line_number 1000 10
