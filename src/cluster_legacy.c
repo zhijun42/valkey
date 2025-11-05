@@ -2902,11 +2902,10 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
     int first_migrated_slot = -1, last_migrated_slot = -1;
     clusterNode *migration_source_node = NULL;
 
-    clusterNode *slot_owner = NULL;
     for (j = 0; j < CLUSTER_SLOTS; j++) {
+        clusterNode* slot_owner = server.cluster->slots[j];
         if (bitmapTestBit(slots, j)) {
             sender_slots++;
-            slot_owner = server.cluster->slots[j];
 
             /* The slot is already bound to the sender of this message. */
             if (slot_owner == sender) {
@@ -4084,7 +4083,7 @@ int clusterProcessPacket(clusterLink *link) {
             serverAssert(nodeIsPrimary(sender));
 
             serverLog(LL_NOTICE, "%s. Sender node %.40s (%s) in shard %.40s",
-                      sender_last_reported_as_replica? "Sender last reported as replica" : "Sender changed slots",
+                      sender_last_reported_as_replica ? "Sender last reported as replica" : "Sender changed slots",
                       sender->name, sender->human_nodename, sender->shard_id);
             /* 1) If the sender of the message is a primary, and we detected that
              *    the set of slots it claims changed, scan the slots to see if we
