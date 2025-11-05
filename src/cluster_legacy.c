@@ -2902,7 +2902,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
     int first_migrated_slot = -1, last_migrated_slot = -1;
     clusterNode *migration_source_node = NULL;
 
-    clusterNode *slot_owner;
+    clusterNode *slot_owner = NULL;
     for (j = 0; j < CLUSTER_SLOTS; j++) {
         if (bitmapTestBit(slots, j)) {
             sender_slots++;
