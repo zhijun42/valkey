@@ -4325,7 +4325,9 @@ void clusterWriteHandler(connection *conn) {
 
 /* In debug mode we might want to temporarily pause a connection to hold
  * off sending more data, and re-enable it after a delay. */
-static long long clusterWriteReschedule(aeEventLoop *el, long long id, void *data) {
+static long long clusterWriteReschedule(aeEventLoop *eventLoop, long long id, void *data) {
+    UNUSED(eventLoop);
+    UNUSED(id);
     const clusterLink *link = data;
     /* Re-attach the writer if there’s still data to send */
     if (listLength(link->send_msg_queue) > 0 && link->conn)
