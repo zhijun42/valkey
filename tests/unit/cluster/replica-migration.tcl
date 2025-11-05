@@ -210,7 +210,7 @@ proc test_nonempty_replica {type} {
 start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
     test_nonempty_replica "shutdown"
 } my_slot_allocation cluster_allocate_replicas ;# start_cluster
-#
+
 start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
     test_nonempty_replica "sigstop"
 } my_slot_allocation cluster_allocate_replicas ;# start_cluster
@@ -351,8 +351,8 @@ proc test_blocked_replica_stale_state_race {type} {
         wait_for_log_messages -4 {"*Failover election won: I'm the new primary*"} 0 1000 10
         wait_for_log_messages -3 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10
 
-        # Notice the ordering here is different from the previous sub-replica test function.
-        # There replica 7 becomes a sub-replica first and then reconfigures to follow primary 4.
+        # Notice the ordering here is different from the previous sub-replica test function where
+        # the replica 7 becomes a sub-replica first and then reconfigures to follow primary 4.
         # But here replica 7 reconfigures to follow primary 4 first and then mistakenly finds
         # out it's a sub-replica.
         set matched_result [wait_for_log_messages -7 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10]
