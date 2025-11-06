@@ -323,7 +323,7 @@ start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 
 # election when it sees 0 marked as FAILED. Since it is now the only "replica" of 0,
 # node 7 wins and becomes an empty primary in the same shard as node 4.
 #
-# This test verifies that such race conditions do not lead to empty primaries or
+# This test verifies that such race condition does not lead to empty primaries or
 # duplicate leaders within the same shard. The scenario reflects a realistic replication
 # race that can occur whenever replicas connect during overlapping RDB saves or network
 # partitions, even without artificial delays.
@@ -380,9 +380,14 @@ proc test_blocked_replica_stale_state_race {type} {
 # dependency, and thus replica 4 couldn't get promoted to primary during the
 # replica 7 blocking period. Then we can't create the edge case we're trying
 # test here.
-start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-    test_blocked_replica_stale_state_race "sigstop"
-} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+
+# This test is currently disabled because it's flaky. If server 7 receives all
+# stale PING packets from server 4 (via inbound link) before receiving PONG reply
+# from it (via outbound link), the tricky empty primary scenario won't happen,
+# and thus this test case won't be applicable.
+#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+#    test_blocked_replica_stale_state_race "sigstop"
+#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
 
 proc test_cluster_setslot {type} {
     test "valkey-cli make source node ignores NOREPLICAS error when doing the last CLUSTER SETSLOT - $type" {
