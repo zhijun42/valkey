@@ -383,6 +383,7 @@ proc test_blocked_replica_stale_state_race {type} {
 # stale PING packets from server 4 (via inbound link) before receiving PONG reply
 # from it (via outbound link), the tricky empty primary scenario won't happen,
 # and thus this test case won't be applicable.
+
 #start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
 #    test_blocked_replica_stale_state_race "sigstop"
 #} my_slot_allocation cluster_allocate_replicas ;# start_cluster
