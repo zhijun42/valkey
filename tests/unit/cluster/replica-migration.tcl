@@ -387,7 +387,7 @@ proc test_blocked_replica_stale_state_race {type} {
 
         set ts [get_current_ts]
         puts "$ts wait for sub-replica"
-        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] $line_number 1000 10
+        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] 0 1000 10
 
         # Notice the ordering here is different from the previous sub-replica test function where
         # the replica 7 becomes a sub-replica first and then reconfigures to follow primary 4.
