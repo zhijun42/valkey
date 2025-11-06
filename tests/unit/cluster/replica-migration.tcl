@@ -226,8 +226,6 @@ proc test_sub_replica {type} {
         move_slot_0_from_primary_3_to_primary_0
 
         # Make sure server 3 and server 7 become a replica of primary 0.
-        set ts [get_current_ts]
-        puts "$ts wait for follow R0"
         set addr "[srv 0 host]:[srv 0 port]"
         wait_for_condition 1000 50 {
             [get_my_primary_peer 3] eq $addr &&
