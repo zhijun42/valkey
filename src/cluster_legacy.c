@@ -4314,7 +4314,7 @@ void clusterWriteHandler(connection *conn) {
             link->send_next_msg_at = ustime() + server.debug_cluster_send_packet_delay * 1000;
             long long delay_ms = server.debug_cluster_send_packet_delay;
             serverLog(LL_NOTICE, "Can't send next msg to node %.40s (%s). delaying %llu ms",
-                node->name, node->human_nodename, delay_ms);
+                      node->name, node->human_nodename, delay_ms);
             aeCreateTimeEvent(server.el, delay_ms, clusterWriteReschedule, link, NULL);
             /* Send exactly one full message per event */
             connSetWriteHandler(link->conn, NULL);
