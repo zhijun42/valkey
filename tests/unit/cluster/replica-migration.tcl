@@ -333,10 +333,15 @@ proc test_blocked_replica_stale_state_race {type} {
         R 7 config set cluster-replica-validity-factor 0
         R 3 config set cluster-allow-replica-migration yes
         R 7 config set cluster-allow-replica-migration yes
+
+        # reject all
+        R 7 config set max-new-connections-per-cycle 1
+
         #
-        set ts [get_current_ts]
-        puts "$ts wait R 4 debug"
-        R 4 debug cluster-packet-delay 10
+#        set ts [get_current_ts]
+#        puts "$ts wait R 4 debug"
+#        R 7 debug cluster-receive-packet-delay 0
+
 
         set ts [get_current_ts]
         puts "$ts wait for move slot"
@@ -355,24 +360,42 @@ proc test_blocked_replica_stale_state_race {type} {
         puts "$ts wait for shut down 0"
         set primary0_pid [stop_primary_0 $type]
 
-        # Wait for the replica to become a primary, and make sure
-        # the other primary become a replica.
+#         Wait for the replica to become a primary, and make sure
+#         the other primary become a replica.
         set ts [get_current_ts]
         puts "$ts wait for r4 won"
         set R4_id [R 4 CLUSTER MYID]
         wait_for_log_messages -4 {"*Failover election won: I'm the new primary*"} 0 1000 10
-        wait_for_log_messages -3 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10
+
+        # After server 4 becomes primary, stop trying to reconnect with server 7
+#        R 4 debug disable-cluster-reconnection 1
+
+        set ts [get_current_ts]
+        puts "$ts wait for r7 follow r4"
+        # unimportant
+#        wait_for_log_messages -3 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10
+        set matched_result [wait_for_log_messages -7 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10]
+        set line_number [lindex $matched_result 1]
+
+#        set ts [get_current_ts]
+#        puts "$ts wait r4 turn off disable"
+#        R 4 debug disable-cluster-reconnection 0
+
+        set ts [get_current_ts]
+        puts "$ts wait for r4 re accept new connections"
+        R 7 config set max-new-connections-per-cycle 10
+
+        set ts [get_current_ts]
+        puts "$ts wait for sub-replica"
+        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] $line_number 1000 10
 
         # Notice the ordering here is different from the previous sub-replica test function where
         # the replica 7 becomes a sub-replica first and then reconfigures to follow primary 4.
         # But here replica 7 reconfigures to follow primary 4 first and then mistakenly finds
         # out it's a sub-replica.
-        set ts [get_current_ts]
-        puts "$ts wait for sub-replica"
-        set matched_result [wait_for_log_messages -7 [list "*Configuration change detected. Reconfiguring myself as a replica of node $R4_id*"] 0 1000 10]
-        set line_number [lindex $matched_result 1]
-        wait_for_log_messages -7 [list "*I'm a sub-replica! Reconfiguring myself as a replica of $R0_id*"] 0 1000 10
 
+        set ts [get_current_ts]
+        puts "$ts wait for r7 re-follow r4"
         # Later replica 7 will start following primary 4 again.
         wait_for_log_messages -7 [list "*Sender $R4_id* and I are in the same shard and I should follow it"] $line_number 1000 10
 

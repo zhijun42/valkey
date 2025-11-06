@@ -137,7 +137,6 @@ sds clusterEncodeOpenSlotsAuxField(int rdbflags);
 int clusterDecodeOpenSlotsAuxField(int rdbflags, sds s);
 static int nodeExceedsHandshakeTimeout(clusterNode *node, mstime_t now);
 void clusterCommandFlushslot(client *c);
-static long long clusterWriteReschedule(aeEventLoop *el, long long id, void *data);
 
 /* Only primaries that own slots have voting rights.
  * Returns 1 if the node has voting rights, otherwise returns 0. */
@@ -1686,6 +1685,14 @@ void freeClusterLink(clusterLink *link) {
             link->node->inbound_link_freed_time = mstime();
         }
     }
+
+    if (link->recv_delay_teid != 0) {
+        serverLog(LL_NOTICE, "deleting te id %d", link->recv_delay_teid);
+        aeDeleteTimeEvent(server.el, link->recv_delay_teid);
+        link->recv_delay_teid = 0;
+        /* Drop the timer’s hold */
+        // linkDecref(link);
+    }
     zfree(link);
 }
 
@@ -1707,6 +1714,8 @@ void setClusterNodeToInboundClusterLink(clusterNode *node, clusterLink *link) {
     serverAssert(!node->inbound_link);
     node->inbound_link = link;
     link->node = node;
+    serverLog(LL_VERBOSE, "Bound cluster node %.40s (%s) to connection of client %s:%d",
+              node->name, node->human_nodename, link->conn->client_ip, link->conn->client_port);
 }
 
 static void clusterConnAcceptHandler(connection *conn) {
@@ -1753,6 +1762,9 @@ void clusterAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
 
         connection *conn = connCreateAccepted(connTypeOfCluster(), cfd, &require_auth);
+        strncpy(conn->client_ip, cip, NET_IP_STR_LEN);
+        conn->client_ip[NET_IP_STR_LEN - 1] = '\0';
+        conn->client_port = cport;
 
         /* Make sure connection is not in an error state */
         if (connGetState(conn) != CONN_STATE_ACCEPTING) {
@@ -2648,7 +2660,7 @@ void clusterProcessGossipSection(clusterMsg *hdr, clusterLink *link) {
 
         if (server.verbosity == LL_DEBUG) {
             ci = representClusterNodeFlags(sdsempty(), flags);
-            serverLog(LL_DEBUG, "GOSSIP %.40s %s:%d@%d %s", g->nodename, g->ip, ntohs(g->port), ntohs(g->cport), ci);
+            // serverLog(LL_DEBUG, "GOSSIP %.40s %s:%d@%d %s", g->nodename, g->ip, ntohs(g->port), ntohs(g->cport), ci);
             sdsfree(ci);
         }
 
@@ -3834,9 +3846,9 @@ int clusterProcessPacket(clusterLink *link) {
 
     /* PING, PONG, MEET: process config information. */
     if (type == CLUSTERMSG_TYPE_PING || type == CLUSTERMSG_TYPE_PONG || type == CLUSTERMSG_TYPE_MEET) {
-        serverLog(LL_DEBUG, "%s packet received: %.40s at time %s", clusterGetMessageTypeString(type),
+        serverLog(LL_DEBUG, "%s packet received: %.40s at time %s from client %d", clusterGetMessageTypeString(type),
                   link->node ? link->node->name : "NULL",
-                  hdr->sent_time);
+                  hdr->sent_time, link->conn->client_port);
 
         if (sender && nodeInMeetState(sender)) {
             /* Once we get a response for MEET from the sender, we can stop sending more MEET. */
@@ -4262,22 +4274,6 @@ void clusterWriteHandler(connection *conn) {
     clusterLink *link = connGetPrivateData(conn);
     ssize_t nwritten;
     size_t totwritten = 0;
-    clusterNode *node = link->node;
-
-    /* If delay is turned on, check if we're allowed to send packets now. */
-    if (server.debug_cluster_send_packet_delay > 0 && link->send_next_msg_at > 0) {
-        long long now = ustime();
-        serverLog(LL_NOTICE, "now is %llu , link->send_next_msg_at is %llu", now, link->send_next_msg_at);
-        if (now < link->send_next_msg_at) {
-            long long delay_ms = (link->send_next_msg_at - now) / 1000;
-            serverLog(LL_NOTICE, "Can't send message ,delaying %llu ms", delay_ms);
-            aeCreateTimeEvent(server.el, delay_ms, clusterWriteReschedule, link, NULL);
-            connSetWriteHandler(link->conn, NULL);
-            return;
-        }
-        serverLog(LL_NOTICE, "Reset send_next_msg_at to 0");
-        link->send_next_msg_at = 0;
-    }
 
     while (totwritten < NET_MAX_WRITES_PER_EVENT && listLength(link->send_msg_queue) > 0) {
         listNode *head = listFirst(link->send_msg_queue);
@@ -4309,33 +4305,11 @@ void clusterWriteHandler(connection *conn) {
         link->send_msg_queue_mem -= sizeof(listNode) + blocklen;
 
         totwritten += nwritten;
-        /* If delay is enabled, skip the next packet and exit now. */
-        if (server.debug_cluster_send_packet_delay > 0) {
-            link->send_next_msg_at = ustime() + server.debug_cluster_send_packet_delay * 1000;
-            long long delay_ms = server.debug_cluster_send_packet_delay;
-            serverLog(LL_NOTICE, "Can't send next msg to node %.40s (%s). delaying %llu ms",
-                      node->name, node->human_nodename, delay_ms);
-            aeCreateTimeEvent(server.el, delay_ms, clusterWriteReschedule, link, NULL);
-            /* Send exactly one full message per event */
-            connSetWriteHandler(link->conn, NULL);
-            return;
-        }
     }
 
     if (listLength(link->send_msg_queue) == 0) connSetWriteHandler(link->conn, NULL);
 }
 
-/* In debug mode we might want to temporarily pause a connection to hold
- * off sending more data, and re-enable it after a delay. */
-static long long clusterWriteReschedule(aeEventLoop *eventLoop, long long id, void *data) {
-    UNUSED(eventLoop);
-    UNUSED(id);
-    const clusterLink *link = data;
-    /* Re-attach the writer if there’s still data to send */
-    if (listLength(link->send_msg_queue) > 0 && link->conn)
-        connSetWriteHandlerWithBarrier(link->conn, clusterWriteHandler, 1);
-    return AE_NOMORE;
-}
 
 /* A connect handler that gets called when a connection to another node
  * gets established.
@@ -4395,6 +4369,14 @@ static inline int isClusterMsgSignatureAndLengthValid(clusterMsg *hdr) {
     return 1;
 }
 
+long long clusterDelayReadHandler(aeEventLoop *eventLoop, long long id, void *clientData) {
+    UNUSED(eventLoop);
+    UNUSED(id);
+    clusterLink *link = clientData;
+    if (link->conn) connSetReadHandler(link->conn, clusterReadHandler);
+    return AE_NOMORE;
+}
+
 /* Read data. Try to read the first field of the header first to check the
  * full length of the packet. When a whole packet is in memory this function
  * will call the function to process the packet. And so forth. */
@@ -4404,6 +4386,26 @@ void clusterReadHandler(connection *conn) {
     clusterMsg *hdr;
     clusterLink *link = connGetPrivateData(conn);
     unsigned int readlen, rcvbuflen;
+
+    clusterNode *node = link->node;
+    if (node && server.debug_cluster_receive_packet_delay && node->tcp_port == 21114) {
+        mstime_t now = mstime();
+        serverLog(LL_NOTICE, "link->inbound %d, receive_next_msg_at: %llu, now: %llu",
+                  link->inbound, node->receive_next_msg_at, now);
+        if (link->inbound && now < node->receive_next_msg_at) {
+            mstime_t delay = node->receive_next_msg_at - mstime();
+            connSetReadHandler(conn, NULL);
+            serverLog(LL_DEBUG, "Node %.40s (%s) Can't read now, delay %llu ms", node->name, node->human_nodename, delay);
+            long long id = aeCreateTimeEvent(server.el, delay, clusterDelayReadHandler, link, NULL);
+            link->recv_delay_teid = id;
+            return;
+        } else {
+            serverLog(LL_DEBUG, "Node %.40s (%s) go ahead", node->name, node->human_nodename);
+        }
+    }
+    if (!node) {
+        serverLog(LL_NOTICE, "node empty");
+    }
 
     while (1) { /* Read as long as there is data to read. */
         rcvbuflen = link->rcvbuf_len;
@@ -4466,6 +4468,7 @@ void clusterReadHandler(connection *conn) {
         }
 
         /* Total length obtained? Process this packet. */
+        bool link_still_valid = true;
         if (rcvbuflen >= RCVBUF_MIN_READ_LEN && rcvbuflen == ntohl(hdr->totlen)) {
             if (clusterProcessPacket(link)) {
                 if (link->rcvbuf_alloc > RCVBUF_INIT_LEN) {
@@ -4476,9 +4479,25 @@ void clusterReadHandler(connection *conn) {
                 }
                 link->rcvbuf_len = 0;
             } else {
-                return; /* Link no longer valid. */
+                // return; /* Link no longer valid. */
+                link_still_valid = false;
             }
         }
+
+        /* one full message consumed from this peer */
+        // node = getNodeFromLinkAndMsg(link, hdr);
+        if (server.debug_cluster_receive_packet_delay > 0 && node && node->tcp_port == 21114 &&
+            link->inbound) {
+            node->receive_next_msg_at = mstime() + server.debug_cluster_receive_packet_delay;
+            mstime_t delay_ms = server.debug_cluster_receive_packet_delay;
+            connSetReadHandler(link->conn, NULL);
+            if (delay_ms < 1) delay_ms = 1;
+            serverLog(LL_DEBUG, "Node %.40s (%s) Read one msg, delay %llu ms", node->name, node->human_nodename, server.debug_cluster_receive_packet_delay);
+            long long id = aeCreateTimeEvent(server.el, delay_ms, clusterDelayReadHandler, link, NULL);
+            link->recv_delay_teid = id;
+            return; /* IMPORTANT: exit to avoid reading more messages this turn */
+        }
+        if (!link_still_valid) return;
     }
 }
 

@@ -42,6 +42,7 @@ typedef struct clusterLink {
     int inbound;                           /* 1 if this link is an inbound link accepted from the related node */
     int flags;                             /* CLUSTER_LINK_... */
     long long send_next_msg_at;            /* Simulate network slowness. If not 0, do not send packets before then */
+    int recv_delay_teid;
 } clusterLink;
 
 /* Cluster link flags and macros. */
@@ -386,6 +387,7 @@ struct _clusterNode {
     rax *fail_reports;                      /* Radix tree for failure reports with sorted order by timestamp */
     int is_node_healthy;                    /* Boolean indicating the cached node health.
                                                Update with updateAndCountChangedNodeHealth(). */
+    mstime_t receive_next_msg_at;           /* Simulate network slowness. If not 0, do not send packets before then */
 };
 
 /* Struct used for storing slot statistics. */

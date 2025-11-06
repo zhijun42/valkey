@@ -117,6 +117,7 @@ static int connSocketConnect(connection *conn,
 
     conn->fd = fd;
     conn->state = CONN_STATE_CONNECTING;
+    serverLog(LL_NOTICE, "connected with port %d at conn->fd :%d", port, conn->fd);
 
     conn->conn_handler = connect_handler;
     aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, conn->type->ae_handler, conn);
@@ -138,6 +139,7 @@ static void connSocketShutdown(connection *conn) {
 
 /* Close the connection and free resources. */
 static void connSocketClose(connection *conn) {
+    serverLog(LL_NOTICE, "conn->fd :%d", conn->fd);
     if (conn->fd != -1) {
         aeDeleteFileEvent(server.el, conn->fd, AE_READABLE | AE_WRITABLE);
         close(conn->fd);
@@ -148,10 +150,11 @@ static void connSocketClose(connection *conn) {
      * keep the connection until the handler returns.
      */
     if (connHasRefs(conn)) {
+        serverLog(LL_NOTICE, "conn->flags |= CONN_FLAG_CLOSE_SCHEDULED");
         conn->flags |= CONN_FLAG_CLOSE_SCHEDULED;
         return;
     }
-
+    serverLog(LL_NOTICE, "zfree(conn);");
     zfree(conn);
 }
 

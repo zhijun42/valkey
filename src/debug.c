@@ -614,12 +614,12 @@ void debugCommand(client *c) {
         server.dirty = 0; /* Prevent AOF / replication */
         serverLog(LL_NOTICE, "Append Only File loaded by DEBUG LOADAOF");
         addReply(c, shared.ok);
-    } else if (!strcasecmp(c->argv[1]->ptr, "cluster-packet-delay") && c->argc == 3) {
+    } else if (!strcasecmp(c->argv[1]->ptr, "cluster-receive-packet-delay") && c->argc == 3) {
         long long delay_ms;
         if (getLongLongFromObjectOrReply(c, c->argv[2], &delay_ms, NULL) != C_OK) return;
         if (delay_ms < 0) delay_ms = 0;
         serverLog(LL_NOTICE, "Set cluster packet delay to %llu ms", delay_ms);
-        server.debug_cluster_send_packet_delay = delay_ms;
+        server.debug_cluster_receive_packet_delay = delay_ms;
         addReply(c, shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr, "drop-cluster-packet-filter") && c->argc == 3) {
         long packet_type;
