@@ -1774,6 +1774,17 @@ void clusterAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
 
+        if (server.debug_cluster_reject_node_connection) {
+            serverLog(LL_VERBOSE, "Wait sometime before accepting connection from %s:%d due to debug config", cip, cport);
+            // connClose(conn);
+            // return;
+            int ms = 10;
+            struct timespec ts = {ms / 1000, (ms % 1000) * 1000000};
+
+            nanosleep(&ts, NULL);
+            serverLog(LL_VERBOSE, "Done sometime before accepting connection from %s:%d due to debug config", cip, cport);
+        }
+
         connKeepAlive(conn, server.cluster_node_timeout / 1000 * 2);
 
         /* Use non-blocking I/O for cluster messages. */
@@ -4369,14 +4380,6 @@ static inline int isClusterMsgSignatureAndLengthValid(clusterMsg *hdr) {
     return 1;
 }
 
-long long clusterDelayReadHandler(aeEventLoop *eventLoop, long long id, void *clientData) {
-    UNUSED(eventLoop);
-    UNUSED(id);
-    clusterLink *link = clientData;
-    if (link->conn) connSetReadHandler(link->conn, clusterReadHandler);
-    return AE_NOMORE;
-}
-
 /* Read data. Try to read the first field of the header first to check the
  * full length of the packet. When a whole packet is in memory this function
  * will call the function to process the packet. And so forth. */
@@ -4386,26 +4389,6 @@ void clusterReadHandler(connection *conn) {
     clusterMsg *hdr;
     clusterLink *link = connGetPrivateData(conn);
     unsigned int readlen, rcvbuflen;
-
-    clusterNode *node = link->node;
-    if (node && server.debug_cluster_receive_packet_delay && node->tcp_port == 21114) {
-        mstime_t now = mstime();
-        serverLog(LL_NOTICE, "link->inbound %d, receive_next_msg_at: %llu, now: %llu",
-                  link->inbound, node->receive_next_msg_at, now);
-        if (link->inbound && now < node->receive_next_msg_at) {
-            mstime_t delay = node->receive_next_msg_at - mstime();
-            connSetReadHandler(conn, NULL);
-            serverLog(LL_DEBUG, "Node %.40s (%s) Can't read now, delay %llu ms", node->name, node->human_nodename, delay);
-            long long id = aeCreateTimeEvent(server.el, delay, clusterDelayReadHandler, link, NULL);
-            link->recv_delay_teid = id;
-            return;
-        } else {
-            serverLog(LL_DEBUG, "Node %.40s (%s) go ahead", node->name, node->human_nodename);
-        }
-    }
-    if (!node) {
-        serverLog(LL_NOTICE, "node empty");
-    }
 
     while (1) { /* Read as long as there is data to read. */
         rcvbuflen = link->rcvbuf_len;
@@ -4468,7 +4451,6 @@ void clusterReadHandler(connection *conn) {
         }
 
         /* Total length obtained? Process this packet. */
-        bool link_still_valid = true;
         if (rcvbuflen >= RCVBUF_MIN_READ_LEN && rcvbuflen == ntohl(hdr->totlen)) {
             if (clusterProcessPacket(link)) {
                 if (link->rcvbuf_alloc > RCVBUF_INIT_LEN) {
@@ -4479,25 +4461,9 @@ void clusterReadHandler(connection *conn) {
                 }
                 link->rcvbuf_len = 0;
             } else {
-                // return; /* Link no longer valid. */
-                link_still_valid = false;
+                return; /* Link no longer valid. */
             }
         }
-
-        /* one full message consumed from this peer */
-        // node = getNodeFromLinkAndMsg(link, hdr);
-        if (server.debug_cluster_receive_packet_delay > 0 && node && node->tcp_port == 21114 &&
-            link->inbound) {
-            node->receive_next_msg_at = mstime() + server.debug_cluster_receive_packet_delay;
-            mstime_t delay_ms = server.debug_cluster_receive_packet_delay;
-            connSetReadHandler(link->conn, NULL);
-            if (delay_ms < 1) delay_ms = 1;
-            serverLog(LL_DEBUG, "Node %.40s (%s) Read one msg, delay %llu ms", node->name, node->human_nodename, server.debug_cluster_receive_packet_delay);
-            long long id = aeCreateTimeEvent(server.el, delay_ms, clusterDelayReadHandler, link, NULL);
-            link->recv_delay_teid = id;
-            return; /* IMPORTANT: exit to avoid reading more messages this turn */
-        }
-        if (!link_still_valid) return;
     }
 }
 

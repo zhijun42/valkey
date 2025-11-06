@@ -2226,8 +2226,9 @@ struct valkeyServer {
     connection *slot_migration_pipe_conn;                  /* xxxx */
     char *slot_migration_pipe_buff;                        /* In slot migration, this buffer holds slot snapshot data. */
     ssize_t slot_migration_pipe_bufflen;                   /* that was read from the rdb pipe. */
+
     /* Debug config to delay (in microseconds) receiving inbound packets within cluster to simulate network slowness. */
-    long long debug_cluster_receive_packet_delay;
+    int debug_cluster_reject_node_connection;
     /* Debug config that goes along with cluster_drop_packet_filter. When set, the link is closed on packet drop. */
     uint32_t debug_cluster_close_link_on_packet_drop : 1;
     /* Debug config to control the random ping. When set, we will disable the random ping in clusterCron. */

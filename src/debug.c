@@ -433,8 +433,8 @@ void debugCommand(client *c) {
             "    Show low level info about `key` and associated value.",
             "    Some fields of the default behavior may be time consuming to fetch,",
             "    and `fast` can be passed to avoid fetching them.",
-            "CLUSTER-PACKET-DELAY <microseconds>",
-            "    Delay sending each packet within the cluster to simulate network slowness.",
+            "CLUSTER-REJECT-NODE-CONNECTION <0|1>",
+            "    Reject all new inbound cluster node connections",
             "DROP-CLUSTER-PACKET-FILTER <packet-type>",
             "    Drop all packets that match the filtered type. Set to -1 allow all packets or -2 to drop all packets.",
             "CLOSE-CLUSTER-LINK-ON-PACKET-DROP <0|1>",
@@ -614,12 +614,11 @@ void debugCommand(client *c) {
         server.dirty = 0; /* Prevent AOF / replication */
         serverLog(LL_NOTICE, "Append Only File loaded by DEBUG LOADAOF");
         addReply(c, shared.ok);
-    } else if (!strcasecmp(c->argv[1]->ptr, "cluster-receive-packet-delay") && c->argc == 3) {
-        long long delay_ms;
-        if (getLongLongFromObjectOrReply(c, c->argv[2], &delay_ms, NULL) != C_OK) return;
-        if (delay_ms < 0) delay_ms = 0;
-        serverLog(LL_NOTICE, "Set cluster packet delay to %llu ms", delay_ms);
-        server.debug_cluster_receive_packet_delay = delay_ms;
+    } else if (!strcasecmp(c->argv[1]->ptr, "cluster-reject-node-connection") && c->argc == 3) {
+        int reject_connection;
+        if (getIntFromObjectOrReply(c, c->argv[2], &reject_connection, NULL) != C_OK) return;
+        serverLog(LL_NOTICE, "Debug config cluster-reject-node-connection set to %d", reject_connection);
+        server.debug_cluster_reject_node_connection = reject_connection;
         addReply(c, shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr, "drop-cluster-packet-filter") && c->argc == 3) {
         long packet_type;

@@ -335,7 +335,7 @@ proc test_blocked_replica_stale_state_race {type} {
         R 7 config set cluster-allow-replica-migration yes
 
         # reject all
-        R 7 config set max-new-connections-per-cycle 1
+        R 7 debug cluster-reject-node-connection 1
 
         #
 #        set ts [get_current_ts]
@@ -382,8 +382,8 @@ proc test_blocked_replica_stale_state_race {type} {
 #        R 4 debug disable-cluster-reconnection 0
 
         set ts [get_current_ts]
-        puts "$ts wait for r4 re accept new connections"
-        R 7 config set max-new-connections-per-cycle 10
+        puts "$ts wait for r4 adjust cluster-reject-node-connection"
+        R 7 debug cluster-reject-node-connection 0
 
         set ts [get_current_ts]
         puts "$ts wait for sub-replica"
