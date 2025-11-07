@@ -271,6 +271,19 @@ start_cluster 3 5 {tags {external:skip cluster} overrides {cluster-allow-replica
 
     test "Empty-shard migration replicates slot importing states" {
         # Validate initial states
+        set info [get_open_slots 0]
+        puts "get_open_slots 0 $info"
+
+        set info [get_open_slots 3]
+        puts "get_open_slots 3 $info"
+
+        set info [get_open_slots 6]
+        puts "get_open_slots 6 $info"
+        set info [get_open_slots 7]
+        puts "get_open_slots 7 $info"
+
+        set info [R 0 cluster nodes]
+        puts "0 nodes: $info"
         assert_not_equal [get_open_slots 0] "\[609->-$R6_id\]"
         assert_not_equal [get_open_slots 6] "\[609-<-$R0_id\]"
         assert_not_equal [get_open_slots 3] "\[609->-$R6_id\]"
