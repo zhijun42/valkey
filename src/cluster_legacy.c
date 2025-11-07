@@ -1696,6 +1696,8 @@ void setClusterNodeToInboundClusterLink(clusterNode *node, clusterLink *link) {
     serverAssert(!node->inbound_link);
     node->inbound_link = link;
     link->node = node;
+    serverLog(LL_VERBOSE, "Bound cluster node %.40s (%s) to connection of client %s:%d",
+              node->name, node->human_nodename, link->conn->client_ip, link->conn->client_port);
 }
 
 static void clusterConnAcceptHandler(connection *conn) {
@@ -1755,6 +1757,9 @@ void clusterAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 
         /* Use non-blocking I/O for cluster messages. */
         serverLog(LL_VERBOSE, "Accepting cluster node connection from %s:%d", cip, cport);
+        strncpy(conn->client_ip, cip, NET_IP_STR_LEN);
+        conn->client_ip[NET_IP_STR_LEN - 1] = '\0';
+        conn->client_port = cport;
 
         /* Accept the connection now.  connAccept() may call our handler directly
          * or schedule it for later depending on connection implementation.
@@ -3820,11 +3825,13 @@ int clusterProcessPacket(clusterLink *link) {
         clusterSendPing(link, CLUSTERMSG_TYPE_PONG);
     }
 
+    serverLog(LL_DEBUG, "%s packet received from: %.40s (%s) from client: %s:%d",
+              clusterGetMessageTypeString(type),
+              link->node ? link->node->name : "NULL",
+              link->node ? link->node->human_nodename : "",
+              link->conn->client_ip, link->conn->client_port);
     /* PING, PONG, MEET: process config information. */
     if (type == CLUSTERMSG_TYPE_PING || type == CLUSTERMSG_TYPE_PONG || type == CLUSTERMSG_TYPE_MEET) {
-        serverLog(LL_DEBUG, "%s packet received: %.40s", clusterGetMessageTypeString(type),
-                  link->node ? link->node->name : "NULL");
-
         if (sender && nodeInMeetState(sender)) {
             /* Once we get a response for MEET from the sender, we can stop sending more MEET. */
             sender->flags &= ~CLUSTER_NODE_MEET;
