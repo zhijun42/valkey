@@ -300,6 +300,22 @@ start_cluster 3 5 {tags {external:skip cluster} overrides {cluster-allow-replica
         wait_for_slot_state 6 "\[609-<-$R0_id\]"
         wait_for_slot_state 3 "\[609->-$R6_id\]"
         wait_for_slot_state 7 "\[609-<-$R0_id\]"
+
+        set info [R 0 cluster slots]
+        puts "0's slots\n$info"
+
+        set info [R 6 cluster slots]
+        puts "6's slots\n$info"
+        set info [R 7 cluster slots]
+        puts "7's slots\n$info"
+
+        set info [R 0 cluster nodes]
+        puts "0's nodes\n$info"
+
+        set info [R 6 cluster nodes]
+        puts "6's nodes\n$info"
+        set info [R 7 cluster nodes]
+        puts "7's nodes\n$info"
     }
 
     test "Empty-shard migration target is auto-updated after failover in target shard" {
