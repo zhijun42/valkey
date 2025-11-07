@@ -4085,9 +4085,9 @@ int clusterProcessPacket(clusterLink *link) {
             /* Make sure CLUSTER_NODE_PRIMARY has already been set by now on sender */
             serverAssert(nodeIsPrimary(sender));
 
-            serverLog(LL_NOTICE, "Mismatch in topology information for sender node %.40s (%s) in shard %.40s", sender->name,
-                      sender->human_nodename, sender->shard_id);
-
+            serverLog(LL_NOTICE, "%s. Sender node %.40s (%s) in shard %.40s",
+                      sender_last_reported_as_replica ? "Sender last reported as replica" : "Sender changed slots",
+                      sender->name, sender->human_nodename, sender->shard_id);
             /* 1) If the sender of the message is a primary, and we detected that
              *    the set of slots it claims changed, scan the slots to see if we
              *    need to update our configuration. */

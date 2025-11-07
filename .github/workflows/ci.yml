@@ -99,7 +99,7 @@ jobs:
           ln -sf $(pwd)/build-release/bin/valkey-server $(pwd)/src/valkey-check-aof
           ln -sf $(pwd)/build-release/bin/valkey-server $(pwd)/src/valkey-check-rdb
           ln -sf $(pwd)/build-release/bin/valkey-server $(pwd)/src/valkey-sentinel
-          ./runtest --verbose --tags -slow --dump-logs -single tests/unit/cluster/slot-migration.tcl
+          ./runtest --verbose --tags -slow --dump-logs --single tests/unit/cluster/slot-migration.tcl
       - name: unit tests
         run: |
           ./build-release/bin/valkey-unit-tests
