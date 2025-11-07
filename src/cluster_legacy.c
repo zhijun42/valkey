@@ -1757,8 +1757,7 @@ void clusterAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 
         /* Use non-blocking I/O for cluster messages. */
         serverLog(LL_VERBOSE, "Accepting cluster node connection from %s:%d", cip, cport);
-        strncpy(conn->client_ip, cip, NET_IP_STR_LEN);
-        conn->client_ip[NET_IP_STR_LEN - 1] = '\0';
+        snprintf(conn->client_ip, sizeof(conn->client_ip), "%s", cip);
         conn->client_port = cport;
 
         /* Accept the connection now.  connAccept() may call our handler directly
