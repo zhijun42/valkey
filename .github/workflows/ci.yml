@@ -32,7 +32,6 @@ jobs:
         run: |
           sudo apt-get install tcl8.6 tclx
           ./runtest --verbose --tags -slow --dump-logs --single tests/unit/cluster/slot-migration.tcl
-#          ./runtest --verbose --tags -slow --dump-logs
       - name: module api test
         run: CFLAGS='-Werror' ./runtest-moduleapi --verbose --dump-logs
       - name: validate commands.def up to date
