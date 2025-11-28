@@ -307,7 +307,7 @@ start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 
 #   - Node 0 (stopped)
 #   - Node 3 (replica of 4)
 #   - Node 4 (new primary)
-#   - Node 7 (still replicating from 0)
+#   - Node 7 (blocked at main thread, still trying to replicate from 0)
 # all belong to the same shard, but node 7 remains in an outdated state.
 #
 # When node 7 times out and reconnects, its outbound links are still valid, so it sends
@@ -330,6 +330,9 @@ proc test_blocked_replica_stale_state_race {type} {
         R 3 config set cluster-replica-validity-factor 0
         R 7 config set cluster-replica-validity-factor 0
         R 3 config set cluster-allow-replica-migration yes
+        # In the test_sub_replica test case above, the config cluster-allow-replica-migration
+        # is turned off and thus R7 could become sub-replica. Here, we show that even with this
+        # config turned on, R7 could also become sub-replica.
         R 7 config set cluster-allow-replica-migration yes
 
         populate_data
@@ -383,10 +386,11 @@ proc test_blocked_replica_stale_state_race {type} {
 # stale PING packets from server 4 (via inbound link) before receiving PONG reply
 # from it (via outbound link), the tricky empty primary scenario won't happen,
 # and thus this test case won't be applicable.
-
-#start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
-#    test_blocked_replica_stale_state_race "sigstop"
-#} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+if {0} {
+start_cluster 4 4 {tags {external:skip cluster} overrides {cluster-node-timeout 1000 cluster-migration-barrier 999}} {
+    test_blocked_replica_stale_state_race "sigstop"
+} my_slot_allocation cluster_allocate_replicas ;# start_cluster
+}
 
 proc test_cluster_setslot {type} {
     test "valkey-cli make source node ignores NOREPLICAS error when doing the last CLUSTER SETSLOT - $type" {
