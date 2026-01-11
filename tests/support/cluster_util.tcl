@@ -89,20 +89,46 @@ proc fix_cluster {addr} {
 # Check if cluster configuration is consistent.
 # All the nodes in the cluster should show same slots configuration and have health
 # state "online" to be considered as consistent.
-proc cluster_config_consistent {} {
+# We can optionally provide the node index to ignore. This is useful
+# when we deliberately stop a server and wait for the other nodes to
+# converge without it.
+proc cluster_config_consistent { ignored_idx } {
+    set base_cfg {}
+
+    set ignored_port -1
+    if { $ignored_idx != {} } {
+        set ignored_port [srv $ignored_idx port]
+    }
+
     for {set j 0} {$j < [llength $::servers]} {incr j} {
-        # Check if all the nodes are online
+        set res [lsearch -exact ignored_idx $j]
+        if { $j == $ignored_idx } {
+            continue
+        }
+
+        # Ensure all nodes believe the cluster is ok
+        set state [CI $j cluster_state]
+        if { $state ne "ok" } {
+            return 0
+        }
+
+        # Check if all the nodes are online, except the one
+        # we optionally ignore.
         set shards_cfg [R $j CLUSTER SHARDS]
         foreach shard_cfg $shards_cfg {
             set nodes [dict get $shard_cfg nodes]
             foreach node $nodes {
+                set node_port [dict get $node port]
+                if { $node_port == $ignored_port } {
+                    continue
+                }
                 if {[dict get $node health] ne "online"} {
                     return 0
                 }
             }
         }
 
-        if {$j == 0} {
+        if {$base_cfg eq {}} {
             set base_cfg [R $j cluster slots]
         } else {
             if {[R $j cluster slots] != $base_cfg} {
@@ -126,8 +152,16 @@ proc cluster_size_consistent {cluster_size} {
 
 # Wait for cluster configuration to propagate and be consistent across nodes.
 proc wait_for_cluster_propagation {} {
+    wait_for_cluster_propagation_except_node {}
+}
+
+proc wait_for_cluster_propagation_except_node { ignored_idx } {
+    # wait_for_condition evaluates the code in different scope
+    # so we need to embed the argument first.
+    set condition_script [format {cluster_config_consistent {%s}} [join $ignored_idx " "]]
+
     wait_for_condition 1000 50 {
-        [cluster_config_consistent] eq 1
+        [eval $condition_script] eq 1
     } else {
         for {set j 0} {$j < [llength $::servers]} {incr j} {
             puts "R $j cluster slots output: [R $j cluster slots]"

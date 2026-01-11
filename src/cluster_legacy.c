@@ -2903,11 +2903,12 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
     clusterNode *migration_source_node = NULL;
 
     for (j = 0; j < CLUSTER_SLOTS; j++) {
+        clusterNode *slot_owner = server.cluster->slots[j];
         if (bitmapTestBit(slots, j)) {
             sender_slots++;
 
             /* The slot is already bound to the sender of this message. */
-            if (server.cluster->slots[j] == sender) {
+            if (slot_owner == sender) {
                 bitmapClearBit(server.cluster->owner_not_claiming_slot, j);
                 continue;
             }
@@ -2923,15 +2924,15 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
              * migration, we will accept the topology update regardless of the
              * epoch. */
             if (isSlotUnclaimed(j) ||
-                server.cluster->slots[j]->configEpoch < senderConfigEpoch ||
+                slot_owner->configEpoch < senderConfigEpoch ||
                 clusterSlotFailoverGranted(j)) {
-                if (!isSlotUnclaimed(j) && !areInSameShard(server.cluster->slots[j], sender)) {
+                if (!isSlotUnclaimed(j) && !areInSameShard(slot_owner, sender)) {
                     if (first_migrated_slot == -1) {
                         /* Delay-initialize the range of migrated slots. */
                         first_migrated_slot = j;
                         last_migrated_slot = j;
-                        migration_source_node = server.cluster->slots[j];
-                    } else if (migration_source_node == server.cluster->slots[j] && j == last_migrated_slot + 1) {
+                        migration_source_node = slot_owner;
+                    } else if (migration_source_node == slot_owner && j == last_migrated_slot + 1) {
                         /* Extend the range of migrated slots. */
                         last_migrated_slot = j;
                     } else {
@@ -2942,13 +2943,13 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
                         /* Reset the range for the next slot. */
                         first_migrated_slot = j;
                         last_migrated_slot = j;
-                        migration_source_node = server.cluster->slots[j];
+                        migration_source_node = slot_owner;
                     }
                 }
 
                 /* Was this slot mine, and still contains keys? Mark it as
                  * a dirty slot. */
-                if (server.cluster->slots[j] == myself && countKeysInSlot(j) && sender != myself) {
+                if (slot_owner == myself && countKeysInSlot(j)) {
                     dirty_slots[dirty_slots_count] = j;
                     dirty_slots_count++;
                 }
@@ -2957,7 +2958,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
 
                 if (clusterIsSlotImporting(j)) importing_slots_count++;
 
-                if (server.cluster->slots[j] == cur_primary) {
+                if (slot_owner == cur_primary) {
                     new_primary = sender;
                     migrated_our_slots++;
                 }
@@ -2979,15 +2980,15 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
 
                 /* Handle the case where we are importing this slot and the ownership changes */
                 clusterNode *in = getImportingSlotSource(j);
-                if (in != NULL &&
-                    in != sender) {
+                if (in != NULL && in != sender) {
                     /* Update importing_slots_from to point to the sender, if it is in the
                      * same shard as the previous slot owner */
                     if (areInSameShard(sender, in)) {
-                        serverLog(LL_VERBOSE,
+                        serverLog(LL_NOTICE,
                                   "Failover occurred in migration source. Update importing "
-                                  "source for slot %d to node %.40s (%s) in shard %.40s.",
-                                  j, sender->name, sender->human_nodename, sender->shard_id);
+                                  "source for slot %d from node %.40s (%s) to node %.40s (%s) in shard %.40s.",
+                                  j, in->name, in->human_nodename,
+                                  sender->name, sender->human_nodename, sender->shard_id);
                         setImportingSlotSource(j, sender);
                     } else {
                         /* If the sender is from a different shard, it must be a result
@@ -3005,7 +3006,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
                 clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG | CLUSTER_TODO_UPDATE_STATE | CLUSTER_TODO_FSYNC_CONFIG);
             }
         } else {
-            if (server.cluster->slots[j] == sender) {
+            if (slot_owner == sender) {
                 /* The slot is currently bound to the sender but the sender is no longer
                  * claiming it. We don't want to unbind the slot yet as it can cause the cluster
                  * to move to FAIL state and also throw client error. Keeping the slot bound to
@@ -3025,7 +3026,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
                 (mn->configEpoch < senderConfigEpoch ||
                  nodeIsReplica(mn)) &&
                 areInSameShard(mn, sender)) {
-                serverLog(LL_VERBOSE,
+                serverLog(LL_NOTICE,
                           "Failover occurred in migration target."
                           " Slot %d is now being migrated to node %.40s (%s) in shard %.40s.",
                           j, sender->name, sender->human_nodename, sender->shard_id);
@@ -3056,11 +3057,11 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
                           j, sender->name, sender->human_nodename, sender->shard_id);
                 setImportingSlotSource(j, NULL);
                 /* Take over the slot ownership if I am not the owner yet*/
-                if (server.cluster->slots[j] != myself) {
+                if (slot_owner != myself) {
                     /* A primary reason why we are here is likely due to my primary crashing during the
                      * slot finalization process, leading me to become the new primary without
                      * inheriting the slot ownership, while the source shard continued and relinquished
-                     * theslot to its old primary. Under such circumstances, the node would undergo
+                     * the slot to its old primary. Under such circumstances, the node would undergo
                      * an election and have its config epoch increased with consensus. That said, we
                      * will still explicitly bump the config epoch here to be consistent with the
                      * existing practice.
@@ -3102,7 +3103,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
      * its slots, this node should become a replica of the sender if
      * one of the following conditions is true:
      *
-     * 1. cluster-allow-replication-migration is enabled
+     * 1. cluster-allow-replica-migration is enabled
      * 2. all the lost slots go to the sender and the sender belongs
      *    to this node's shard
      *
@@ -3130,7 +3131,7 @@ void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoc
             clusterSetPrimary(sender, !are_in_same_shard, !are_in_same_shard);
             clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG | CLUSTER_TODO_UPDATE_STATE | CLUSTER_TODO_FSYNC_CONFIG |
                                  CLUSTER_TODO_BROADCAST_ALL);
-        } else if (nodeIsPrimary(myself) && (sender_slots >= migrated_our_slots) && !are_in_same_shard) {
+        } else if (nodeIsPrimary(myself) && sender_slots >= migrated_our_slots) {
             /* When all our slots are lost to the sender and the sender belongs to
              * a different shard, this is likely due to a client triggered slot
              * migration. Don't reconfigure this node to migrate to the new shard
@@ -3612,8 +3613,8 @@ int clusterProcessPacket(clusterLink *link) {
         uint16_t type = ntohs(hdr->type);
         if (server.debug_cluster_close_link_on_packet_drop &&
             (type == server.cluster_drop_packet_filter || server.cluster_drop_packet_filter == -2)) {
-            freeClusterLink(link);
             serverLog(LL_WARNING, "Closing link for matching packet type %s", clusterGetMessageTypeString(type));
+            freeClusterLink(link);
             return 0;
         }
         return 1;
@@ -4046,10 +4047,13 @@ int clusterProcessPacket(clusterLink *link) {
                          * Or a replica's primary can turn itself into a replica of its other
                          * replica during a failover. In this case, they are in the same shard,
                          * so we can try a psync. */
-                        serverLog(LL_NOTICE, "I'm a sub-replica! Reconfiguring myself as a replica of %.40s from %.40s",
-                                  myself->replicaof->replicaof->name, myself->replicaof->name);
-                        clusterSetPrimary(myself->replicaof->replicaof, 1,
-                                          !areInSameShard(myself->replicaof->replicaof, myself));
+                        clusterNode *ultimate_primary = myself->replicaof->replicaof;
+                        serverLog(LL_NOTICE, "I'm a sub-replica! Reconfiguring myself as a "
+                                             "replica of %.40s (%s) from %.40s (%s)",
+                                  ultimate_primary->name, ultimate_primary->human_nodename,
+                                  myself->replicaof->name, myself->replicaof->human_nodename);
+                        clusterSetPrimary(ultimate_primary, 1,
+                                          !areInSameShard(ultimate_primary, myself));
                         clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG | CLUSTER_TODO_UPDATE_STATE |
                                              CLUSTER_TODO_FSYNC_CONFIG | CLUSTER_TODO_BROADCAST_ALL);
                     }
@@ -4073,15 +4077,14 @@ int clusterProcessPacket(clusterLink *link) {
          * instance claims is different compared to the set of slots we have
          * for it or if there was a failover in the sender's shard. Check
          * this ASAP to avoid other computational expensive checks later.*/
-
         if (sender && sender_claims_to_be_primary &&
             (sender_last_reported_as_replica || memcmp(sender->slots, hdr->myslots, sizeof(hdr->myslots)))) {
             /* Make sure CLUSTER_NODE_PRIMARY has already been set by now on sender */
             serverAssert(nodeIsPrimary(sender));
 
-            serverLog(LL_NOTICE, "Mismatch in topology information for sender node %.40s (%s) in shard %.40s", sender->name,
-                      sender->human_nodename, sender->shard_id);
-
+            serverLog(LL_NOTICE, "%s. Sender node %.40s (%s) in shard %.40s",
+                      sender_last_reported_as_replica ? "Sender last reported as replica" : "Sender changed slots",
+                      sender->name, sender->human_nodename, sender->shard_id);
             /* 1) If the sender of the message is a primary, and we detected that
              *    the set of slots it claims changed, scan the slots to see if we
              *    need to update our configuration. */
@@ -4123,6 +4126,21 @@ int clusterProcessPacket(clusterLink *link) {
                     }
                 }
             }
+        }
+
+        /* In some corner case our primary might be failed, and it used to
+         * have a replica, which has become the new primary. We should start
+         * following this new primary, otherwise we would start failover and
+         * eventually become an empty primary.
+         */
+        if (sender && sender_claims_to_be_primary &&
+            nodeFailed(clusterNodeGetPrimary(myself)) &&
+            areInSameShard(sender, myself) &&
+            nodeIsReplica(myself) &&
+            sender != clusterNodeGetPrimary(myself)) {
+            serverLog(LL_NOTICE, "Sender %.40s (%s) and I are in the same shard and I should follow it",
+                      sender->name, sender->human_nodename);
+            clusterSetPrimary(sender, 1, 1);
         }
 
         /* If our config epoch collides with the sender's try to fix
@@ -4277,7 +4295,8 @@ void clusterLinkConnectHandler(connection *conn) {
 
     /* Check if connection succeeded */
     if (connGetState(conn) != CONN_STATE_CONNECTED) {
-        serverLog(LL_VERBOSE, "Connection with Node %.40s at %s:%d failed: %s", node->name, node->ip, node->cport,
+        serverLog(LL_VERBOSE, "Connection with Node %.40s (%s) at %s:%d failed: %s",
+                  node->name, node->human_nodename, node->ip, node->cport,
                   connGetLastError(conn));
         freeClusterLink(link);
         return;
@@ -5345,6 +5364,15 @@ void clusterHandleReplicaFailover(void) {
         }
     }
 
+    /* A replica might not properly start its replication (e.g. the
+     * primary didn't reply to the replication request yet).
+     * In this case, it's not a valid candidate for promotion. */
+    const long long repl_offset = replicationGetReplicaOffset();
+    if (repl_offset == 0) {
+        serverLog(LL_NOTICE, "Cannot start election with zero replication offset");
+        return;
+    }
+
     /* If the previous failover attempt timeout and the retry time has
      * elapsed, we can setup a new one. */
     if (auth_age > auth_retry_time) {
@@ -5383,9 +5411,9 @@ void clusterHandleReplicaFailover(void) {
                   "Start of election delayed for %lld milliseconds "
                   "(rank #%d, primary rank #%d, offset %lld).",
                   server.cluster->failover_auth_time - now, server.cluster->failover_auth_rank,
-                  server.cluster->failover_failed_primary_rank, replicationGetReplicaOffset());
+                  server.cluster->failover_failed_primary_rank, repl_offset);
         /* Now that we have a scheduled election, broadcast our offset
-         * to all the other replicas so that they'll updated their offsets
+         * to all the other replicas so that they'll update their offsets
          * if our offset is better. */
         clusterBroadcastPong(CLUSTER_BROADCAST_LOCAL_REPLICAS);
 
